@@ -347,12 +347,14 @@ class LCMNeighbours(BaseMiner, DiscovererMixin):
             # make support absolute if needed
             self._min_supp = self.min_supp * self.n_transactions_
 
-        # Here low support items are removed.
-        # low_supp_items = [k for k, v in item_to_tids.items() if len(v) < self._min_supp]
-        # for item in low_supp_items:
-        #     del item_to_tids[item]
-
+        # Saves the dictionary about the item's transactions.
         self.item_to_tids_ = SortedDict(item_to_tids)
+
+        # Removes low support items (while taking into account neighbours).
+        low_supp_items = [k for k, v in item_to_tids.items() if not self._is_neighbourfrequent(frozenset([k]), self._min_supp)]
+        for item in low_supp_items:
+            del self.item_to_tids_[item]
+
         return self
 
     def discover(self, *, return_tids=False, return_depth=False):
