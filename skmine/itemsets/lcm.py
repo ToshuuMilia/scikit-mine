@@ -297,7 +297,7 @@ class LCMNeighbours(BaseMiner, DiscovererMixin):
     >>> patterns[patterns.itemset.map(len) > 3]  # doctest: +SKIP
     """
 
-    def __init__(self, *, min_supp=0.2, max_depth=20, n_jobs=1, verbose=False):
+    def __init__(self, item_to_neighbours=defaultdict(list), *, min_supp=0.2, max_depth=20, n_jobs=1, verbose=False):
         _check_min_supp(min_supp)
         self.min_supp: Union[int, float] = min_supp  # provided by user
         self.max_depth: int = int(max_depth)
@@ -310,7 +310,7 @@ class LCMNeighbours(BaseMiner, DiscovererMixin):
         self.n_transactions_: int = 0
 
         # Holds the information about the neighbours of each item.
-        self._item_to_neighbours: Dict[Item, List[Item]] = defaultdict(list)
+        self._item_to_neighbours: Dict[Item, List[Item]] = item_to_neighbours
 
         self.ctr = 0
         self.n_jobs = n_jobs
@@ -349,11 +349,6 @@ class LCMNeighbours(BaseMiner, DiscovererMixin):
 
         # Saves the dictionary about the item's transactions.
         self.item_to_tids_ = SortedDict(item_to_tids)
-
-        # Removes low support items (while taking into account neighbours).
-        low_supp_items = [k for k, v in item_to_tids.items() if not self._is_neighbourfrequent(frozenset([k]), self._min_supp)]
-        for item in low_supp_items:
-            del self.item_to_tids_[item]
 
         return self
 
@@ -411,8 +406,10 @@ class LCMNeighbours(BaseMiner, DiscovererMixin):
         )
 
         # Explore the tree of patterns for each single item and knowing in which transaction they are in.
+        # Only for the itemsets with a high enough support.
         dfs = Parallel(n_jobs=self.n_jobs, prefer="processes")(
             delayed(self._explore_root)(item, tids) for item, tids in supp_sorted_items
+            if self._is_neighbourfrequent(frozenset([item]), self._min_supp)
         )
 
         # make sure we have something to concat
