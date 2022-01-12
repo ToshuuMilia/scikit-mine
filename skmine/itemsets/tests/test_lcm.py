@@ -203,10 +203,10 @@ true_patterns_a = pd.DataFrame(
     [  # from D with min_supp=3
         [{"camembert"}, 5],
         [{"lait"}, 5],
-        [{"camembert" "lait"}, 3],
+        [{"camembert", "lait"}, 3],
         [{"lait", "plaid"}, 4],
-        [{"café" "camembert"}, 4],
-        [{"café" "camembert", "chocolat"}, 3],
+        [{"café", "camembert"}, 4],
+        [{"café", "camembert", "chocolat"}, 3],
         [{"biscuit"}, 3],
     ],
     columns=["itemset", "support"],
