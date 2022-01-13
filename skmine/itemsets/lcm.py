@@ -465,10 +465,8 @@ class LCMNeighbours(BaseMiner, DiscovererMixin):
             for new_limit in candidates:
                 ids = self.item_to_tids_[new_limit]
                 candidate_pattern = p_prime | frozenset([new_limit])
-                # if pattern_transaction_ids.intersection_len(ids) >= self._min_supp:  # TODO Modify here
 
-                assert self._is_neighbourfrequent(candidate_pattern, self._min_supp) == (pattern_transaction_ids.intersection_len(ids) >= self._min_supp), f"{self._is_neighbourfrequent(candidate_pattern, self._min_supp)} == {(pattern_transaction_ids.intersection_len(ids) >= self._min_supp)} - pattern: {pattern} - candidatepattern: {candidate_pattern} - new_limit: {new_limit} - interseclen: {pattern_transaction_ids.intersection_len(ids)} - ptids: {pattern_transaction_ids} - ids: {ids} - minsupp: {self._min_supp}"
-
+                # Check if the candidate pattern with its new limit would be frequent or not.
                 if self._is_neighbourfrequent(candidate_pattern, self._min_supp):
                     assert self._min_supp != 100, f"{candidate_pattern}"
                     # new pattern and its associated tids
