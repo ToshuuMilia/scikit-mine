@@ -478,28 +478,32 @@ class LCMNeighbours(BaseMiner, DiscovererMixin):
     def _is_neighbourfrequent(self, pattern: Pattern, min_supp: Optional[int] = None) -> bool:
         """Computes whether a pattern is expected to be frequent while taking into account its neighbour patterns."""
 
-        total_support: int = 0
+        supported_tids: Bitmap = Bitmap()
+        already_seen: Dict[Pattern, bool] = defaultdict(lambda: False)
 
         for pattern_candidate in self._generate_allneighbours(pattern):
 
-            # Initialize the transaction ids bitmap with one random item.
-            p_transaction_ids: Bitmap = self.item_to_tids_[next(iter(pattern_candidate))]
+            if not already_seen:
+                already_seen[pattern_candidate] = True
 
-            # For each item, creates the intersection of the transaction ids. At the end of the loop the transaction ids
-            # represents in which transactions the pattern appears.
-            # If at one moment the number of transaction is zero, it means the support of the pattern is zero.
-            for item in pattern_candidate:
-                p_transaction_ids = p_transaction_ids.intersection(self.item_to_tids_[item])
-                if len(p_transaction_ids) == 0:
+                # Initialize the transaction ids bitmap with one random item.
+                pattern_tids: Bitmap = self.item_to_tids_[next(iter(pattern_candidate))]
+
+                # For each item, creates the intersection of the transaction ids. At the end of the loop the transaction ids
+                # represents in which transactions the pattern appears.
+                # If at one moment the number of transaction is zero, it means the support of the pattern is zero.
+                for item in pattern_candidate:
+                    pattern_tids = pattern_tids.intersection(self.item_to_tids_[item])
+                    if len(pattern_tids) == 0:
+                        break
+
+                supported_tids = supported_tids | pattern_tids
+
+                # If the minimum support threshold is met, then the pattern given in parameter is frequent.
+                if len(supported_tids) >= min_supp:
                     break
 
-            total_support += len(p_transaction_ids)
-
-            # If the minimum support threshold is met, then the pattern given in parameter is frequent.
-            if total_support >= min_supp:
-                break
-
-        return total_support >= min_supp
+        return len(supported_tids) >= min_supp
 
     def _generate_allneighbours(self, pattern: Pattern) -> Generator[Pattern, None, None]:
         """A generator to generate all the neighbour patterns, including the original one."""
