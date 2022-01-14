@@ -242,18 +242,17 @@ Pattern = FrozenSet
 
 class LCMNeighbours(BaseMiner, DiscovererMixin):
     """
-    Linear time Closed item set Miner.
-
-    LCM can be used as a **generic purpose** miner, yielding some patterns
-    that will be later submitted to a custom acceptance criterion.
-
-    It can also be used to simply discover the set of **closed itemsets** from
-    a transactional dataset.
+    Customized version of LCM (described above) to include the notion of neighbour patterns in the support computation.
 
     Parameters
     ----------
+    item_to_neighbours: Dict[Item, List[Item]]
+        The neighbours of each items, used for the neighbour pattern generation.
+        If the dictionnary is empty, LCMNeighbours is equivalent to LCM without the neighbours notion.
+
     min_supp: int or float, default=0.2
-        The minimum support for itemsets to be rendered in the output
+        The minimum support for itemsets to be rendered in the output, while taking into account the neighbours.
+        The pattern returns may have a true support lower than this if thay are "supported" by neighbour patterns alone.
         Either an int representing the absolute support, or a float for relative support
         Default to 0.2 (20%)
 
@@ -279,22 +278,6 @@ class LCMNeighbours(BaseMiner, DiscovererMixin):
     .. [2] Alexandre Termier
         "Pattern mining rock: more, faster, better"
 
-    Examples
-    --------
-
-    >>> from skmine.itemsets import LCM
-    >>> from skmine.datasets.fimi import fetch_chess
-    >>> chess = fetch_chess()
-    >>> lcm = LCM(min_supp=2000)
-    >>> patterns = lcm.fit_discover(chess)      # doctest: +SKIP
-    >>> patterns.head()                         # doctest: +SKIP
-        itemset support
-    0      (58)    3195
-    1  (11, 58)    2128
-    2  (15, 58)    2025
-    3  (17, 58)    2499
-    4  (21, 58)    2224
-    >>> patterns[patterns.itemset.map(len) > 3]  # doctest: +SKIP
     """
 
     def __init__(self, item_to_neighbours=defaultdict(list), *, min_supp=0.2, max_depth=20, n_jobs=1, verbose=False):
@@ -318,7 +301,7 @@ class LCMNeighbours(BaseMiner, DiscovererMixin):
 
     def fit(self, D, y=None):
         """
-        fit LCM on the transactional database, by keeping records of singular items
+        Fit LCMNeighbours on the transactional database, by keeping records of singular items
         and their transaction ids.
 
         Parameters
@@ -353,7 +336,8 @@ class LCMNeighbours(BaseMiner, DiscovererMixin):
         return self
 
     def discover(self, *, return_tids=False, return_depth=False):
-        """Return the set of closed itemsets, with respect to the minium support
+        """Return the set of closed itemsets, with respect to the minimum support (while taking into account neighbour
+        patterns).
 
         Parameters
         ----------
@@ -386,18 +370,6 @@ class LCMNeighbours(BaseMiner, DiscovererMixin):
 
             if `return_depth` is `True`, then a `depth` column is also present
 
-        Example
-        -------
-        >>> from skmine.itemsets import LCM
-        >>> D = [[1, 2, 3, 4, 5, 6], [2, 3, 5], [2, 5]]
-        >>> LCM(min_supp=2).fit_discover(D)
-             itemset  support
-        0     (2, 5)        3
-        1  (2, 3, 5)        2
-        >>> LCM(min_supp=2).fit_discover(D, return_tids=True, return_depth=True) # doctest: +SKIP
-             itemset       tids depth
-        0     (2, 5)  [0, 1, 2]     0
-        1  (2, 3, 5)     [0, 1]     1
         """
 
         # Sorts the entries of the SortedDict such that the item with the most support is 1st.
