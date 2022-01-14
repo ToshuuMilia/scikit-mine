@@ -457,21 +457,23 @@ class LCMNeighbours(BaseMiner, DiscovererMixin):
             p_prime: Pattern = (
                 pattern | set(cp) | {max_k}
             )  # max_k has been consumed when calling next()
+
+            # If the current pattern
             # sorted items in ouput for better reproducibility
-            yield tuple(sorted(p_prime)), pattern_transaction_ids, depth
+            if self._is_neighbourfrequent(p_prime, self._min_supp):
+                yield tuple(sorted(p_prime)), pattern_transaction_ids, depth
 
-            candidates: Iterable = self.item_to_tids_.keys() - p_prime
-            candidates = candidates[: candidates.bisect_left(limit)]
-            for new_limit in candidates:
-                ids = self.item_to_tids_[new_limit]
-                candidate_pattern = p_prime | frozenset([new_limit])
+                candidates: Iterable = self.item_to_tids_.keys() - p_prime
+                candidates = candidates[: candidates.bisect_left(limit)]
+                for new_limit in candidates:
+                    ids = self.item_to_tids_[new_limit]
+                    candidate_pattern = p_prime | frozenset([new_limit])
 
-                # Check if the candidate pattern with its new limit would be frequent or not.
-                if self._is_neighbourfrequent(candidate_pattern, self._min_supp):
-                    assert self._min_supp != 100, f"{candidate_pattern}"
-                    # new pattern and its associated tids
-                    new_p_tids = (p_prime, pattern_transaction_ids.intersection(ids))
-                    yield from self._inner(new_p_tids, new_limit, depth + 1)
+                    # Check if the candidate pattern with its new limit would be frequent or not.
+                    if self._is_neighbourfrequent(candidate_pattern, self._min_supp):
+                        # new pattern and its associated tids
+                        new_p_tids = (p_prime, pattern_transaction_ids.intersection(ids))
+                        yield from self._inner(new_p_tids, new_limit, depth + 1)
 
     def _is_neighbourfrequent(self, pattern: Pattern, min_supp: Optional[int] = None) -> bool:
         """Computes whether a pattern is expected to be frequent while taking into account its neighbour patterns."""
@@ -481,11 +483,11 @@ class LCMNeighbours(BaseMiner, DiscovererMixin):
 
         for pattern_candidate in self._generate_allneighbours(pattern):
 
-            if not already_seen:
+            if not already_seen[pattern_candidate]:
                 already_seen[pattern_candidate] = True
 
-                # Initialize the transaction ids bitmap with one random item.
-                pattern_tids: Bitmap = self.item_to_tids_[next(iter(pattern_candidate))]
+                # Initialize the patterns transaction ids bitmap with all transactions.
+                pattern_tids: Bitmap = Bitmap(range(0, self.n_transactions_))
 
                 # For each item, creates the intersection of the transaction ids. At the end of the loop the transaction ids
                 # represents in which transactions the pattern appears.
