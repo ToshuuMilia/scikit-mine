@@ -163,3 +163,66 @@ def test_relative_support():
     for item in lcm.item_to_tids_.keys():
         assert set(lcm.item_to_tids_[item]) == true_item_to_tids[item]
 
+
+D2 = [
+    ["a", "b", "c", "d", "g"],
+    ["a", "c", "d", "h"],
+    ["a", "b", "e", "f", "j", "l"],
+    ["a", "c", "d"],
+    ["b", "f", "i", "k"],
+    ["a", "c", "e", "h"],
+    ["b", "c", "d", "g", "i"],
+    ["a", "c", "f", "j", "k"],
+    ["e", "g", "i", "k", "l"],
+    ["b", "c", "d", "e", "f"]
+]
+
+item_to_neighbours2 = {
+    "a": ["c", "d", "l"],
+    "b": list(),
+    "c": ["a", "d"],
+    "d": ["a", "c", "g", "e"],
+    "e": ["a", "c", "d", "l"],
+    "f": ["h", "i", "k"],
+    "g": ["d"],
+    "h": ["f", "i", "k"],
+    "i": ["f", "h"],
+    "j": list(),
+    "k": ["f", "h"],
+    "l": ["a", "e"]
+}
+
+true_item_to_tids2 = {
+    1: {0, 3, 5},
+    2: {0, 1, 2, 3, 4},
+    3: {0, 1, 6},
+    4: {0, 3, 4, 5, 6},
+    5: {0, 1, 2, 3},
+    6: {0, 3, 5, 6},
+}
+
+true_patterns2 = pd.DataFrame(
+    [  # from D with min_supp=3
+        [{2}, 5],
+        [{4}, 5],
+        [{2, 4}, 3],
+        [{2, 5}, 4],
+        [{4, 6}, 4],
+        [{1, 4, 6}, 3],
+        [{3}, 3],
+    ],
+    columns=["itemset", "support"],
+)
+
+true_patterns2.loc[:, "itemset"] = true_patterns2.itemset.map(tuple)
+
+
+def test_lcm_neighboursgen():
+    lcm = LCMNeighbours(item_to_neighbours=item_to_neighbours2, min_supp=5)
+    pattern = frozenset(["l"])
+
+    neighbours = list(lcm._generate_allneighbours(pattern))
+
+    assert frozenset(["l"]) in neighbours
+    for neighbour in item_to_neighbours2["l"]:
+        assert frozenset([neighbour]) in neighbours
