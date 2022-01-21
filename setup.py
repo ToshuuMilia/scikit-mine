@@ -4,16 +4,17 @@
 
 from setuptools import find_packages, setup
 import numpy
+import codecs
 
 import skmine
 
-DISTNAME = 'scikit-mine'
+DISTNAME = 'scikit-mine-alt'
 DESCRIPTION = 'Pattern mining in Python'
-MAINTAINER = 'R. Adon'
-MAINTAINER_EMAIL = 'remi.adon@gmail.com'
-URL = 'https://github.com/scikit-mine/scikit-mine'
+MAINTAINER = 'N/A'
+MAINTAINER_EMAIL = 'N/A'
+URL = 'https://github.com/ToshuuMilia/scikit-mine'
 LICENSE = 'new BSD'
-DOWNLOAD_URL = 'https://github.com/scikit-mine/scikit-mine'
+DOWNLOAD_URL = 'https://github.com/ToshuuMilia/scikit-mine'
 VERSION = skmine.__version__
 CLASSIFIERS = ['Intended Audience :: Science/Research',
                'Intended Audience :: Developers',
@@ -43,7 +44,7 @@ EXTRAS_REQUIRE = {
 
 
 # try replacing with `codecs.open('README.rst', encoding='utf-8-sig') as f:` if error
-with open('README.rst') as readme_file:
+with codecs.open('README.rst', encoding='utf-8-sig') as readme_file:
     LONG_DESCRIPTION = readme_file.read()
 
 with open('requirements.txt') as req_fd:
