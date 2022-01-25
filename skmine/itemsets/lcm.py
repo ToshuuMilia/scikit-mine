@@ -10,7 +10,7 @@ as described in `http://lig-membres.imag.fr/termier/HLCM/hlcm.pdf`
 
 from collections import defaultdict
 from itertools import takewhile
-from typing import Union, List, Dict, Any, Tuple, FrozenSet, Generator, Iterable, Optional
+from typing import Union, List, Dict, Any, Tuple, FrozenSet, Generator, Iterable, Optional, Set
 
 import numpy as np
 import pandas as pd
@@ -280,26 +280,30 @@ class LCMNeighbours(BaseMiner, DiscovererMixin):
 
     """
 
-    def __init__(self, item_to_neighbours=defaultdict(list), *, min_supp=0.2, max_depth=20, n_jobs=1, verbose=False):
+    def __init__(self, *, min_supp=0.2, max_depth=20, n_jobs=1, verbose=False):
         _check_min_supp(min_supp)
         self.min_supp: Union[int, float] = min_supp  # provided by user
         self.max_depth: int = int(max_depth)
         self._min_supp: Union[int, float] = _check_min_supp(self.min_supp)
 
         # Holds the information about in which transaction is present each item.
-        self.item_to_tids_: SortedDict[Item, Bitmap] = SortedDict()
+        self.itemid_to_tids_: SortedDict[Item, Bitmap] = SortedDict()
+
+        # Be aware that IDs for item start at 1.
+        self.itemid_to_item: Dict[int, Item] = dict()
+        self.item_to_itemid: Dict[Item, int] = dict()
 
         # Total number of transactions.
         self.n_transactions_: int = 0
 
         # Holds the information about the neighbours of each item.
-        self._item_to_neighbours: Dict[Item, List[Item]] = item_to_neighbours
+        self._item_to_neighbours: Dict[int, Set] = defaultdict(set)
 
         self.ctr = 0
         self.n_jobs = n_jobs
         self.verbose = verbose
 
-    def fit(self, D, y=None):
+    def fit(self, D, item_to_neighbours: Dict[Item, List[Item]]=defaultdict(list), y=None):
         """
         Fit LCMNeighbours on the transactional database, by keeping records of singular items
         and their transaction ids.
@@ -330,8 +334,25 @@ class LCMNeighbours(BaseMiner, DiscovererMixin):
             # make support absolute if needed
             self._min_supp = self.min_supp * self.n_transactions_
 
-        # Saves the dictionary about the item's transactions.
-        self.item_to_tids_ = SortedDict(item_to_tids)
+        # Sort the item's transactions dictionary such that the item with the most support is 1st.
+        supp_sorted_items = sorted(
+            item_to_tids.items(), key=lambda e: len(e[1]), reverse=True
+        )
+
+        # For each item, replace its name by the ID of frequency (the more frequent an item is, the lower is its ID).
+        for item_id, (item, transactions) in enumerate(supp_sorted_items):
+            # Register the itemid and its transactions in the SortedDict to be used later.
+            self.itemid_to_tids_[item_id+1] = transactions
+
+            # Save the information about which ID correspond to which item (in both direction).
+            self.item_to_itemid[item] = item_id+1
+            self.itemid_to_item[item_id+1] = item
+
+        # Translate the neighbours to have itemid instead of raw items.
+        for item, lst_neighbours in item_to_neighbours.items():
+            item_id = self.item_to_itemid[item]
+            for neighbour in lst_neighbours:
+                self._item_to_neighbours[item_id].add(self.item_to_itemid[neighbour])
 
         return self
 
@@ -372,15 +393,10 @@ class LCMNeighbours(BaseMiner, DiscovererMixin):
 
         """
 
-        # Sorts the entries of the SortedDict such that the item with the most support is 1st.
-        supp_sorted_items = sorted(
-            self.item_to_tids_.items(), key=lambda e: len(e[1]), reverse=True
-        )
-
         # Explore the tree of patterns for each single item and knowing in which transaction they are in.
         # Only for the itemsets with a high enough support.
         dfs = Parallel(n_jobs=self.n_jobs, prefer="processes")(
-            delayed(self._explore_root)(item, tids) for item, tids in supp_sorted_items
+            delayed(self._explore_root)(item, tids) for item, tids in self.itemid_to_tids_.items()
             if self._is_neighbourfrequent(frozenset([item]), self._min_supp)
         )
 
@@ -417,7 +433,7 @@ class LCMNeighbours(BaseMiner, DiscovererMixin):
         # project and reduce DB w.r.t P
         cp: Generator[Item] = (
             item
-            for item, item_transction_ids in reversed(self.item_to_tids_.items())
+            for item, item_transction_ids in reversed(self.itemid_to_tids_.items())
             if pattern_transaction_ids.issubset(item_transction_ids)
             if item not in pattern
         )
@@ -425,7 +441,7 @@ class LCMNeighbours(BaseMiner, DiscovererMixin):
         # items are in reverse order, so the first consumed is the max
         max_k = next(takewhile(lambda e: e >= limit, cp), None)
 
-        if max_k and max_k == limit:
+        if max_k is not None and max_k == limit:
             p_prime: Pattern = (
                 pattern | set(cp) | {max_k}
             )  # max_k has been consumed when calling next()
@@ -433,12 +449,14 @@ class LCMNeighbours(BaseMiner, DiscovererMixin):
             # If the current pattern
             # sorted items in ouput for better reproducibility
             if self._is_neighbourfrequent(p_prime, self._min_supp):
-                yield tuple(sorted(p_prime)), pattern_transaction_ids, depth
 
-                candidates: Iterable = self.item_to_tids_.keys() - p_prime
+                p_prime_str: List[Item] = list(map(lambda itemid: self.itemid_to_item[itemid], p_prime))
+                yield tuple(sorted(p_prime_str)), pattern_transaction_ids, depth
+
+                candidates: Iterable = self.itemid_to_tids_.keys() - p_prime
                 candidates = candidates[: candidates.bisect_left(limit)]
                 for new_limit in candidates:
-                    ids = self.item_to_tids_[new_limit]
+                    ids = self.itemid_to_tids_[new_limit]
                     candidate_pattern = p_prime | frozenset([new_limit])
 
                     # Check if the candidate pattern with its new limit would be frequent or not.
@@ -465,7 +483,7 @@ class LCMNeighbours(BaseMiner, DiscovererMixin):
                 # represents in which transactions the pattern appears.
                 # If at one moment the number of transaction is zero, it means the support of the pattern is zero.
                 for item in pattern_candidate:
-                    pattern_tids = pattern_tids.intersection(self.item_to_tids_[item])
+                    pattern_tids = pattern_tids.intersection(self.itemid_to_tids_[item])
                     if len(pattern_tids) == 0:
                         break
 
@@ -487,7 +505,7 @@ class LCMNeighbours(BaseMiner, DiscovererMixin):
             current_item: Item = next(iter(pattern))
 
             # Generate all possible combination of neighbours pattern, including the original one.
-            for neighbour_item in [current_item] + self._item_to_neighbours[current_item]:
+            for neighbour_item in {current_item} | self._item_to_neighbours[current_item]:
                 for candidate_pattern in self._generate_allneighbours(pattern - frozenset([current_item])):
                     yield frozenset({neighbour_item}) | candidate_pattern
 
