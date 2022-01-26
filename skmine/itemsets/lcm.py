@@ -469,29 +469,24 @@ class LCMNeighbours(BaseMiner, DiscovererMixin):
         """Computes whether a pattern is expected to be frequent while taking into account its neighbour patterns."""
 
         supported_tids: Bitmap = Bitmap()
-        already_seen: Dict[Pattern, bool] = defaultdict(lambda: False)
 
         for pattern_candidate in self._generate_allneighbours(pattern):
+            # Initialize the patterns transaction ids bitmap with all transactions.
+            pattern_tids: Bitmap = Bitmap(range(0, self.n_transactions_))
 
-            if not already_seen[pattern_candidate]:
-                already_seen[pattern_candidate] = True
-
-                # Initialize the patterns transaction ids bitmap with all transactions.
-                pattern_tids: Bitmap = Bitmap(range(0, self.n_transactions_))
-
-                # For each item, creates the intersection of the transaction ids. At the end of the loop the transaction ids
-                # represents in which transactions the pattern appears.
-                # If at one moment the number of transaction is zero, it means the support of the pattern is zero.
-                for item in pattern_candidate:
-                    pattern_tids = pattern_tids.intersection(self.itemid_to_tids_[item])
-                    if len(pattern_tids) == 0:
-                        break
-
-                supported_tids = supported_tids | pattern_tids
-
-                # If the minimum support threshold is met, then the pattern given in parameter is frequent.
-                if len(supported_tids) >= min_supp:
+            # For each item, creates the intersection of the transaction ids. At the end of the loop the transaction ids
+            # represents in which transactions the pattern appears.
+            # If at one moment the number of transaction is zero, it means the support of the pattern is zero.
+            for item in pattern_candidate:
+                pattern_tids = pattern_tids.intersection(self.itemid_to_tids_[item])
+                if len(pattern_tids) == 0:
                     break
+
+            supported_tids = supported_tids | pattern_tids
+
+            # If the minimum support threshold is met, then the pattern given in parameter is frequent.
+            if len(supported_tids) >= min_supp:
+                break
 
         return len(supported_tids) >= min_supp
 
