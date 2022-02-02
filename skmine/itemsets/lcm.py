@@ -88,7 +88,12 @@ class LCM(BaseMiner, DiscovererMixin):
         self.min_supp = min_supp  # provided by user
         self.max_depth = int(max_depth)
         self._min_supp = _check_min_supp(self.min_supp)
-        self.item_to_tids_ = SortedDict()
+        self.itemid_to_tids_ = SortedDict()
+
+        # Be aware that IDs for item start at 1.
+        self.itemid_to_item: Dict[int, Item] = dict()
+        self.item_to_itemid: Dict[Item, int] = dict()
+
         self.n_transactions_ = 0
         self.ctr = 0
         self.n_jobs = n_jobs
@@ -122,11 +127,25 @@ class LCM(BaseMiner, DiscovererMixin):
             # make support absolute if needed
             self._min_supp = self.min_supp * self.n_transactions_
 
+        # Removes items with low support
         low_supp_items = [k for k, v in item_to_tids.items() if len(v) < self._min_supp]
         for item in low_supp_items:
             del item_to_tids[item]
 
-        self.item_to_tids_ = SortedDict(item_to_tids)
+        # Sort the item's transactions dictionary such that the item with the most support is 1st.
+        supp_sorted_items = sorted(
+            item_to_tids.items(), key=lambda e: len(e[1]), reverse=True
+        )
+
+        # For each item, replace its name by the ID of frequency (the more frequent an item is, the lower is its ID).
+        for item_id, (item, transactions) in enumerate(supp_sorted_items):
+            # Register the itemid and its transactions in the SortedDict to be used later.
+            self.itemid_to_tids_[item_id + 1] = transactions
+
+            # Save the information about which ID correspond to which item (in both direction).
+            self.item_to_itemid[item] = item_id + 1
+            self.itemid_to_item[item_id + 1] = item
+
         return self
 
     def discover(self, *, return_tids=False, return_depth=False):
@@ -176,13 +195,9 @@ class LCM(BaseMiner, DiscovererMixin):
         0     (2, 5)  [0, 1, 2]     0
         1  (2, 3, 5)     [0, 1]     1
         """
-        # reverse order of support
-        supp_sorted_items = sorted(
-            self.item_to_tids_.items(), key=lambda e: len(e[1]), reverse=True
-        )
 
         dfs = Parallel(n_jobs=self.n_jobs, prefer="processes")(
-            delayed(self._explore_root)(item, tids) for item, tids in supp_sorted_items
+            delayed(self._explore_root)(item, tids) for item, tids in self.itemid_to_tids_.items()
         )
 
         # make sure we have something to concat
@@ -210,7 +225,7 @@ class LCM(BaseMiner, DiscovererMixin):
         # project and reduce DB w.r.t P
         cp = (
             item
-            for item, ids in reversed(self.item_to_tids_.items())
+            for item, ids in reversed(self.itemid_to_tids_.items())
             if tids.issubset(ids)
             if item not in p
         )
@@ -222,13 +237,15 @@ class LCM(BaseMiner, DiscovererMixin):
             p_prime = (
                 p | set(cp) | {max_k}
             )  # max_k has been consumed when calling next()
-            # sorted items in ouput for better reproducibility
-            yield tuple(sorted(p_prime)), tids, depth
 
-            candidates = self.item_to_tids_.keys() - p_prime
+            # Translate the item IDs into their str for pretty printed patterns.
+            p_prime_str: List[Item] = list(map(lambda itemid: self.itemid_to_item[itemid], p_prime))
+            yield tuple(sorted(p_prime_str)), tids, depth
+
+            candidates = self.itemid_to_tids_.keys() - p_prime
             candidates = candidates[: candidates.bisect_left(limit)]
             for new_limit in candidates:
-                ids = self.item_to_tids_[new_limit]
+                ids = self.itemid_to_tids_[new_limit]
                 if tids.intersection_len(ids) >= self._min_supp:
                     # new pattern and its associated tids
                     new_p_tids = (p_prime, tids.intersection(ids))
@@ -544,7 +561,7 @@ class LCMMax(LCM):
         # project and reduce DB w.r.t P
         cp = (
             item
-            for item, ids in reversed(self.item_to_tids_.items())
+            for item, ids in reversed(self.itemid_to_tids_.items())
             if tids.issubset(ids)
             if item not in p
         )
@@ -558,12 +575,12 @@ class LCMMax(LCM):
                 p | set(cp) | {max_k}
             )  # max_k has been consumed when calling next()
 
-            candidates = self.item_to_tids_.keys() - p_prime
+            candidates = self.itemid_to_tids_.keys() - p_prime
             candidates = candidates[: candidates.bisect_left(limit)]
 
             no_cand = True
             for new_limit in candidates:
-                ids = self.item_to_tids_[new_limit]
+                ids = self.itemid_to_tids_[new_limit]
                 if tids.intersection_len(ids) >= self._min_supp:
                     no_cand = False
                     # get new pattern and its associated tids
