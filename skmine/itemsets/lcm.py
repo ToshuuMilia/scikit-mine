@@ -488,6 +488,13 @@ class LCMNeighbours(BaseMiner, DiscovererMixin):
         supported_tids: Bitmap = Bitmap()
 
         for pattern_candidate in self._generate_allneighbours(pattern):
+
+            # If the pattern_candidate (which is the neighbour of the provided "pattern") has not the same size as
+            # the provided "pattern", then it should not be considered as a neighbour. Then skip to the next neighbour
+            # candidate.
+            if len(pattern_candidate) != len(pattern):
+                continue
+
             # Initialize the patterns transaction ids bitmap with all transactions.
             pattern_tids: Bitmap = Bitmap(range(0, self.n_transactions_))
 
